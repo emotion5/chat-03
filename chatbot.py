@@ -1,8 +1,10 @@
 import ollama
+import re
+from typing import Optional
 
 
 class KoreanChatbot:
-    def __init__(self, model_name="qwen2.5:7b"):
+    def __init__(self, model_name: str = "qwen2.5:7b") -> None:
         """
         한국어 챗봇 초기화
 
@@ -10,18 +12,32 @@ class KoreanChatbot:
             model_name: Ollama 모델명 (기본값: qwen2.5:7b)
         """
         self.model_name = model_name
-        self.system_prompt = """당신은 친절하고 유능한 한국어 AI 어시스턴트입니다.
-사용자의 질문에 정확하고 도움이 되는 답변을 제공합니다.
-코딩, 일반 상식, 추론, 번역 등 다양한 분야에서 도움을 줄 수 있습니다.
+        self.system_prompt = """你是韩语专家助手。
 
-**중요**: 답변은 반드시 순수한 한글로만 작성해주세요. 한자를 절대 사용하지 마세요.
-예시: "開發" (X) → "개발" (O), "實行" (X) → "실행" (O)
-답변은 간결하면서도 명확하게 작성해주세요."""
+【严格规则 - 必须遵守】
+1. 回答必须100%使用韩语（한글），一个中文字都不能出现
+2. 严禁使用中文标点符号：、。，等
+3. 只能使用韩语标点：, . ! ? 등
+4. 检查每个字：如果不是한글、英文、数字、标点，就不要写
+
+【示例】
+错误 ✗: "的"、"了"、"等"、"可以"、"历史"、"尤其"
+正确 ✓: "의"、했습니다"、"등"、"할 수 있습니다"、"역사"、"특히"
+
+回答前请自查：有中文字吗？如果有，改成韩语再回答。
+
+You MUST respond in 100% Korean language. Check every character before responding."""
 
         print(f"챗봇 초기화 완료!")
         print(f"모델: {self.model_name}")
 
-    def chat(self, user_input, history=None):
+    def has_chinese(self, text: str) -> bool:
+        """텍스트에 중국어 문자가 포함되어 있는지 확인"""
+        # 중국어 유니코드 범위 체크
+        chinese_pattern = re.compile(r'[\u4e00-\u9fff]+')
+        return bool(chinese_pattern.search(text))
+
+    def chat(self, user_input: str, history: Optional[list[dict[str, str]]] = None) -> str:
         """
         사용자 입력에 대한 응답 생성
 
@@ -42,15 +58,37 @@ class KoreanChatbot:
         ]
 
         try:
-            response = ollama.chat(
-                model=self.model_name,
-                messages=messages
-            )
-            return response['message']['content']
+            # 최대 3번 재시도
+            max_retries = 3
+            for attempt in range(max_retries):
+                response = ollama.chat(
+                    model=self.model_name,
+                    messages=messages
+                )
+                answer = response['message']['content']
+
+                # 중국어 체크
+                if not self.has_chinese(answer):
+                    return answer
+
+                # 중국어가 발견되면 재요청
+                if attempt < max_retries - 1:
+                    messages.append({
+                        "role": "assistant",
+                        "content": answer
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": "你的回答中包含了中文字符。请用纯韩语重新回答，不要使用任何中文字。/ Your answer contains Chinese characters. Please answer again in pure Korean only."
+                    })
+
+            # 3번 시도 후에도 중국어가 있으면 그대로 반환
+            return answer
+
         except Exception as e:
             return f"오류가 발생했습니다: {str(e)}"
 
-    def run(self):
+    def run(self) -> None:
         """터미널에서 대화형 챗봇 실행"""
         print("\n" + "="*50)
         print("한국어 챗봇 시작!")

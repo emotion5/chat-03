@@ -8,7 +8,7 @@ bot = KoreanChatbot()
 print("챗봇 로딩 완료!\n")
 
 
-def chat_interface(message, history):
+def chat_interface(message: str | list[dict[str, str]], history: list[tuple[str, str] | dict[str, str]]) -> str:
     """
     Gradio ChatInterface용 채팅 함수
 
